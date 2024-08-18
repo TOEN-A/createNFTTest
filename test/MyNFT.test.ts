@@ -7,8 +7,8 @@ describe("MyNFT", function () {
     const [owner, addr1] = await ethers.getSigners();
     // ownerとaddr1にtestFTトークンを配布
     const TestFT = await ethers.getContractFactory("TestFT");
-    const testFT = await TestFT.deploy("TestFT", "TFT", 100);
-    await testFT.connect(owner).mint(addr1.address, 100);
+    const testFT = await TestFT.deploy("TestFT", "TFT", 1000);
+    await testFT.connect(owner).mint(addr1.address, 1000);
 
     // MyNFTをデプロイ
     const MyNFT = await ethers.getContractFactory("MyNFT");
@@ -75,18 +75,18 @@ describe("MyNFT", function () {
 
     await myNFT.connect(owner).mintNFT(addr1, tokenURI);
     await myNFT.connect(owner).registerFT(testFT.getAddress());
-    await testFT.connect(addr1).approve(myNFT.getAddress(), 100);
+    await testFT.connect(addr1).approve(myNFT.getAddress(), 1000);
     await myNFT.connect(addr1).levelUpWithFT(0);
     const level = await myNFT.getTokenLevel(0);
     expect(level).to.equal(2); // レベルアップできる
-    expect(await testFT.balanceOf(addr1.address)).to.equal(90); // FTが消費される
-    expect(await testFT.balanceOf(myNFT.getAddress())).to.equal(10); // FTがコントラクトアドレスに送られる
+    expect(await testFT.balanceOf(addr1.address)).to.equal(900); // FTが消費される
+    expect(await testFT.balanceOf(myNFT.getAddress())).to.equal(100); // FTがコントラクトアドレスに送られる
   });
 
   it("存在しないNFTのレベルアップはFTを受け取っても出来ない", async function () {
     const { owner, addr1, testFT, myNFT } = await loadFixture(deployFixture);
     await myNFT.connect(owner).registerFT(testFT.getAddress());
-    await testFT.connect(owner).approve(myNFT.getAddress(), 100);
+    await testFT.connect(owner).approve(myNFT.getAddress(), 1000);
     await expect(myNFT.connect(owner).levelUpWithFT(0)).to.be.revertedWith(
       "ERC721Metadata: Level up for nonexistent token"
     );
@@ -99,7 +99,7 @@ describe("MyNFT", function () {
 
     await myNFT.connect(owner).mintNFT(owner, tokenURI);
     await myNFT.connect(owner).registerFT(testFT.getAddress());
-    await testFT.connect(owner).approve(myNFT.getAddress(), 100);
+    await testFT.connect(owner).approve(myNFT.getAddress(), 1000);
     await myNFT.connect(owner).setTokenLevel(0, 100);
     await expect(myNFT.connect(owner).levelUpWithFT(0)).to.be.revertedWith(
       "ERC721Metadata: Max level reached"
@@ -112,7 +112,7 @@ describe("MyNFT", function () {
 
     await myNFT.connect(owner).mintNFT(owner, tokenURI);
     await myNFT.connect(owner).registerFT(testFT.getAddress());
-    await testFT.connect(owner).approve(myNFT.getAddress(), 100);
+    await testFT.connect(owner).approve(myNFT.getAddress(), 1000);
     await expect(myNFT.connect(addr1).levelUpWithFT(0)).to.be.revertedWith(
       "ERC721Metadata: FT owner is not NFT owner"
     );
@@ -123,7 +123,7 @@ describe("MyNFT", function () {
     const tokenURI = "https://example.com/token/1";
 
     await myNFT.connect(owner).mintNFT(owner, tokenURI);
-    await testFT.connect(owner).approve(myNFT.getAddress(), 100);
+    await testFT.connect(owner).approve(myNFT.getAddress(), 1000);
     await expect(myNFT.connect(owner).levelUpWithFT(0)).to.be.revertedWith(
       "ERC721Metadata: FT address is not registered"
     );
@@ -135,12 +135,70 @@ describe("MyNFT", function () {
 
     await myNFT.connect(owner).mintNFT(owner, tokenURI);
     await myNFT.connect(owner).registerFT(testFT.getAddress());
-    await testFT.connect(owner).approve(myNFT.getAddress(), 100);
+    await testFT.connect(owner).approve(myNFT.getAddress(), 1000);
     await myNFT.connect(owner).levelUpWithFT(0);
     await ethers.provider.send("evm_increaseTime", [3598]);
     await ethers.provider.send("evm_mine");
     await expect(myNFT.connect(owner).levelUpWithFT(0)).to.be.revertedWith(
       "ERC721Metadata: Not enough time elapsed since last level up"
+    );
+  });
+
+  it("前回のレベルアップから時間が経っていなくても追加のFTを使ってレベルアップできる", async function () {
+    const { owner, addr1, testFT, myNFT } = await loadFixture(deployFixture);
+    const tokenURI = "https://example.com/token/1";
+
+    await myNFT.connect(owner).mintNFT(owner, tokenURI);
+    await myNFT.connect(owner).registerFT(testFT.getAddress());
+    await testFT.connect(owner).approve(myNFT.getAddress(), 1000);
+    await myNFT.connect(owner).levelUpWithFT(0);
+    await myNFT.connect(owner).fastLevelUpWithFT(0);
+    expect(await myNFT.getTokenLevel(0)).to.equal(3);
+    expect(await testFT.balanceOf(owner.address)).to.equal(500);
+  });
+
+  it("前回のレベルアップから1時間だけ時間を経過させるテスト", async function () {
+    const { owner, addr1, testFT, myNFT } = await loadFixture(deployFixture);
+    const tokenURI = "https://example.com/token/1";
+
+    await myNFT.connect(owner).mintNFT(owner, tokenURI);
+    await myNFT.connect(owner).registerFT(testFT.getAddress());
+    await testFT.connect(owner).approve(myNFT.getAddress(), 1000);
+    await myNFT.connect(owner).levelUpWithFT(0);
+    await myNFT.connect(owner).fastLevelUpWithFT(0);
+    await ethers.provider.send("evm_increaseTime", [3600]);
+    await ethers.provider.send("evm_mine");
+    await myNFT.connect(owner).fastLevelUpWithFT(0);
+    expect(await myNFT.getTokenLevel(0)).to.equal(4);
+    expect(await testFT.balanceOf(owner.address)).to.equal(0);
+  });
+
+  it("前回のレベルアップから十分に時間が経っている場合はfastLevelUpWithFTは使えない", async function () {
+    const { owner, addr1, testFT, myNFT } = await loadFixture(deployFixture);
+    const tokenURI = "https://example.com/token/1";
+
+    await myNFT.connect(owner).mintNFT(owner, tokenURI);
+    await myNFT.connect(owner).registerFT(testFT.getAddress());
+    await testFT.connect(owner).approve(myNFT.getAddress(), 1000);
+    await myNFT.connect(owner).levelUpWithFT(0);
+    await ethers.provider.send("evm_increaseTime", [3600]);
+    await ethers.provider.send("evm_mine");
+    await expect(myNFT.connect(owner).fastLevelUpWithFT(0)).to.be.revertedWith(
+      "ERC721Metadata: enough time elapsed since last level up"
+    );
+  });
+
+  it("FTの残高が足りない場合ははfastLevelUpWithFTは使えない", async function () {
+    const { owner, addr1, testFT, myNFT } = await loadFixture(deployFixture);
+    const tokenURI = "https://example.com/token/1";
+
+    await myNFT.connect(owner).mintNFT(owner, tokenURI);
+    await myNFT.connect(owner).registerFT(testFT.getAddress());
+    await testFT.connect(owner).approve(myNFT.getAddress(), 1000);
+    await myNFT.connect(owner).levelUpWithFT(0);
+    await myNFT.connect(owner).fastLevelUpWithFT(0);
+    await expect(myNFT.connect(owner).fastLevelUpWithFT(0)).to.be.revertedWith(
+      "ERC721Metadata: Insufficient FT balance"
     );
   });
 
@@ -150,7 +208,7 @@ describe("MyNFT", function () {
 
     await myNFT.connect(owner).mintNFT(owner, tokenURI);
     await myNFT.connect(owner).registerFT(testFT.getAddress());
-    await testFT.connect(owner).approve(myNFT.getAddress(), 100);
+    await testFT.connect(owner).approve(myNFT.getAddress(), 1000);
     await myNFT.connect(owner).levelUpWithFT(0);
     await ethers.provider.send("evm_increaseTime", [3600]);
     await ethers.provider.send("evm_mine");
@@ -175,7 +233,7 @@ describe("MyNFT", function () {
 
     await myNFT.connect(owner).mintNFT(owner, tokenURI);
     await myNFT.connect(owner).registerFT(testFT.getAddress());
-    await testFT.connect(owner).approve(myNFT.getAddress(), 100);
+    await testFT.connect(owner).approve(myNFT.getAddress(), 1000);
     await myNFT.connect(owner).levelUpWithFT(0);
     const lastLevelUpTime = await myNFT.connect(owner).getLastLevelUpTime(0);
     expect(lastLevelUpTime).to.equal(await time.latest());

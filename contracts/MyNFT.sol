@@ -8,12 +8,10 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract MyNFT is ERC721URIStorage, Ownable {
     uint256 private _tokenIds;
+    uint256 private _MAXLEVEL = 100;
     mapping(uint256 => uint256) private _tokenLevels;
     mapping(uint256 => uint256) private _lastLevelUpTime;
     address private _ftAddress;
-    IERC20 private _ftToken;
-    // レベルの最大値
-    uint256 private _MAXLEVEL = 100;
 
     constructor() ERC721("MyNFT", "NFT") Ownable(_msgSender()) {}
 
@@ -37,7 +35,7 @@ contract MyNFT is ERC721URIStorage, Ownable {
         return _ftAddress;
     }
 
-    // FTトークンをレベルの10倍だけ受けとってレベルアップする
+    // FTトークンをレベルの100倍だけ受けとってレベルアップする
     function levelUpWithFT(uint256 tokenId) public {
         require(
             tokenId < _tokenIds,
@@ -56,7 +54,7 @@ contract MyNFT is ERC721URIStorage, Ownable {
             "ERC721Metadata: FT address is not registered"
         );
         uint256 ftBalance = IERC20(_ftAddress).balanceOf(msg.sender);
-        uint256 levelUpCost = _tokenLevels[tokenId] * 10;
+        uint256 levelUpCost = _tokenLevels[tokenId] * 100;
         uint256 requiredTimeElapsed = _tokenLevels[tokenId] * 1 hours - 1 hours;
         require(
             block.timestamp >= _lastLevelUpTime[tokenId] + requiredTimeElapsed,
@@ -68,6 +66,51 @@ contract MyNFT is ERC721URIStorage, Ownable {
             "ERC721Metadata: Insufficient FT balance"
         );
         IERC20(_ftAddress).transferFrom(msg.sender, address(this), levelUpCost);
+        _tokenLevels[tokenId] += 1;
+        _lastLevelUpTime[tokenId] = block.timestamp;
+    }
+
+    function fastLevelUpWithFT(uint256 tokenId) public {
+        require(
+            tokenId < _tokenIds,
+            "ERC721Metadata: Level up for nonexistent token"
+        );
+        require(
+            _tokenLevels[tokenId] < _MAXLEVEL,
+            "ERC721Metadata: Max level reached"
+        );
+        require(
+            ownerOf(tokenId) == msg.sender,
+            "ERC721Metadata: FT owner is not NFT owner"
+        );
+        require(
+            _ftAddress != address(0),
+            "ERC721Metadata: FT address is not registered"
+        );
+
+        uint256 ftBalance = IERC20(_ftAddress).balanceOf(msg.sender);
+        uint256 levelUpCost = _tokenLevels[tokenId] * 100;
+        uint256 requiredTimeElapsed = _tokenLevels[tokenId] * 1 hours - 1 hours;
+        uint256 timeSinceLastLevelUp = block.timestamp -
+            _lastLevelUpTime[tokenId];
+
+        uint256 additionalCost = 0;
+        require(
+            timeSinceLastLevelUp < requiredTimeElapsed,
+            "ERC721Metadata: enough time elapsed since last level up"
+        );
+
+        uint256 remainingTime = requiredTimeElapsed - timeSinceLastLevelUp;
+        additionalCost = (remainingTime / 1 hours + 1) * 200;
+
+        uint256 totalCost = levelUpCost + additionalCost;
+
+        require(
+            ftBalance >= totalCost,
+            "ERC721Metadata: Insufficient FT balance"
+        );
+
+        IERC20(_ftAddress).transferFrom(msg.sender, address(this), totalCost);
         _tokenLevels[tokenId] += 1;
         _lastLevelUpTime[tokenId] = block.timestamp;
     }
@@ -95,5 +138,9 @@ contract MyNFT is ERC721URIStorage, Ownable {
             "ERC721Metadata: Level set for nonexistent token"
         );
         _tokenLevels[tokenId] = newLevel;
+    }
+
+    function getTotalSupply() public view returns (uint256) {
+        return _tokenIds;
     }
 }
